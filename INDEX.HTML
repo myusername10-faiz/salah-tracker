@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salah Rakah Tracker</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Chart.js CDN for visual charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <!-- Load Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #e0f2f1; /* Light Teal background for main app */
+            min-height: 100vh;
+        }
+        .prayer-card {
+            box-shadow: 0 5px 10px -2px rgba(0, 0, 0, 0.05);
+        }
+        .prayer-card-nafl {
+            border-left: 4px solid #f59e0b; /* Amber */
+        }
+        
+        /* Fard Status Tiles - Compact */
+        .fard-tile {
+            transition: all 0.1s;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .fard-tile-none {
+            background-color: #f3f4f6; /* Light Gray */
+            color: #4b5563;
+        }
+        .fard-tile-prayed {
+            background-color: #2dd4bf; /* Medium Teal */
+            color: white;
+        }
+        .fard-tile-jamaah {
+            background-color: #047857; /* Deep Green */
+            color: white;
+        }
+        .fard-tile-missed {
+            background-color: #f87171; /* Light Red */
+            color: white;
+        }
+        
+        /* Rakah counter buttons */
+        .rakah-btn {
+            background-color: #ccfbf1; /* Very light teal */
+            color: #0f766e;
+            transition: all 0.1s;
+        }
+        .rakah-btn:hover {
+            background-color: #99f6e4;
+        }
+        
+        /* Toast Notification Styling */
+        #toast-container {
+            position: fixed;
+            top: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            max-width: 90%;
+            pointer-events: none;
+        }
+        .toast {
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            transform: translateY(-20px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Custom style to make the date input look like a button/selector */
+        #date-input-wrapper {
+            transition: opacity 0.3s, max-height 0.3s;
+            overflow: hidden;
+            max-height: 0;
+            opacity: 0;
+        }
+        #date-input-wrapper.show {
+            max-height: 50px; /* Sufficient height for the input */
+            opacity: 1;
+            margin-top: 8px;
+        }
+
+        #date-input {
+             appearance: none; /* Hide default calendar icon on some browsers */
+             cursor: pointer;
+             border: 2px solid #0f766e; /* Darker border */
+             padding: 8px 12px;
+             border-radius: 8px;
+             font-weight: 600;
+             text-align: center;
+             color: #047857;
+             width: 100%;
+             max-width: 250px;
+        }
+        /* Progress Grid styles */
+        .progress-stat {
+            background-color: #f0fdfa; /* Even lighter teal for stats */
+            border: 1px solid #ccfbf1;
+            padding: 1rem;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+        }
+        .progress-stat .value {
+            font-size: 1.875rem; /* 3xl */
+            font-weight: 800;
+            color: #0f766e;
+            line-height: 1;
+        }
+        .progress-stat .label {
+            font-size: 0.75rem; /* xs */
+            font-weight: 600;
+            color: #4b5563;
+            margin-top: 0.25rem;
+        }
+
+        /* User Info Modal (Replaces Auth Modal) */
+        #user-info-overlay {
+            background-color: #374151; /* Dark Slate Background */
+        }
+        #user-info-modal {
+            background-color: #fff;
+            padding: 2.5rem;
+            border-radius: 1rem;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+        .user-input {
+            border: 1px solid #e2e8f0;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            width: 100%;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center p-4">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container">
+        <div id="toast-notification" class="toast bg-teal-500 text-white p-3 rounded-lg shadow-xl font-medium hidden">
+            <!-- Notification message goes here -->
+        </div>
+    </div>
+
+    <!-- User Information Entry Modal -->
+    <div id="user-info-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-50 transition-opacity duration-300">
+        <div id="user-info-modal">
+            <h2 class="text-3xl font-extrabold text-teal-800 text-center mb-2">Welcome</h2>
+            <p class="text-gray-500 text-center mb-6">Enter your details to start tracking your Salah.</p>
+
+            <!-- User Info Form -->
+            <form id="user-info-form" class="space-y-4">
+                <input type="text" id="user-name" placeholder="First Name" class="user-input" required>
+                <input type="text" id="user-last-name" placeholder="Last Name" class="user-input" required>
+                
+                <button type="submit" id="submit-user-info-btn" class="w-full bg-teal-500 text-white p-3 rounded-lg font-semibold hover:bg-teal-600 transition">
+                    Start Tracking
+                </button>
+            </form>
+        </div>
+    </div>
+    <!-- End User Info Modal -->
+
+
+    <!-- Main Tracker Container (Hidden by default until info is entered) -->
+    <div id="app" class="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-2xl p-6 md:p-8 mt-4 mb-10 border-t-8 border-teal-600 hidden">
+
+        <!-- Header -->
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-extrabold text-teal-800">
+                <span id="personalized-greeting">Salah Rakah Tracker</span>
+            </h1>
+            <p class="text-gray-500 mt-1">Daily Fard Status & Voluntary Rakah (Offline Mode)</p>
+            <div id="loading-indicator" class="text-sm text-teal-600 mt-2 hidden">Loading data...</div>
+            
+            <!-- Profile Section -->
+            <div id="profile-section" class="mt-3 p-2 bg-teal-50 border-y border-teal-100">
+                <p class="text-xs font-semibold text-teal-700">Profile</p>
+                <p class="text-sm font-bold text-teal-900" id="display-full-name"></p>
+                <p class="text-[0.6rem] text-gray-500 mt-1">Status: Offline Local Storage</p>
+                
+                <!-- Reset Profile Button -->
+                <button id="reset-profile-btn" class="mt-2 text-xs text-red-500 hover:text-red-700 font-medium border border-red-300 px-2 py-1 rounded-md transition duration-150">
+                    Reset Profile / Log Out
+                </button>
+            </div>
+            <!-- End Profile Section -->
+
+        </header>
+
+        <!-- Date Navigation -->
+        <div class="flex flex-col items-center justify-center space-y-2 mb-6">
+            <div class="flex items-center space-x-2">
+                <button id="prev-day" class="p-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition duration-150 shadow-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                
+                <div id="display-date" class="text-center">
+                    <p id="display-day-name" class="text-xl font-extrabold text-teal-700"></p>
+                    <p id="display-full-date" class="text-sm font-medium text-gray-600"></p>
+                </div>
+
+                <button id="next-day" class="p-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition duration-150 shadow-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+            </div>
+            
+            <!-- Container for the Date Input (hidden by default) -->
+            <div id="date-input-wrapper" class="w-full flex justify-center">
+                 <input type="date" id="date-input" class="text-lg shadow-inner">
+            </div>
+
+            <!-- Visible text button to trigger the hidden date picker -->
+            <button id="open-date-picker" class="text-sm text-teal-600 hover:text-teal-800 font-semibold p-1 mt-1">
+                Change Date
+            </button>
+        </div>
+        
+        <!-- Daily Progress Summary & Charts -->
+        <h2 class="text-xl font-bold text-teal-800 mb-3 border-b pb-1">Daily Progress Summary</h2>
+        
+        <!-- Numerical Stats Grid -->
+        <div id="progress-summary" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <!-- Stats will be injected here -->
+        </div>
+
+        <!-- Chart Containers -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white p-4 rounded-xl shadow-md border border-gray-100">
+                <h3 class="text-md font-semibold text-teal-700 mb-3 text-center">Fard Status Distribution</h3>
+                <canvas id="fardPieChart"></canvas>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-md border border-gray-100">
+                <h3 class="text-md font-semibold text-teal-700 mb-3 text-center">Total Rakah by Prayer</h3>
+                <canvas id="rakahBarChart"></canvas>
+            </div>
+        </div>
+        <!-- End Charts -->
+
+
+        <!-- Fard Status Dashboard - Horizontal View (Matches reference image style) -->
+        <h2 class="text-xl font-bold text-teal-800 mb-3 border-b pb-1">Fard Status Tracker</h2>
+        <div id="fard-status-dashboard" class="grid grid-cols-5 gap-3 text-center mb-6">
+            <!-- Fard Status Tiles will be injected here by JavaScript -->
+        </div>
+
+        <!-- Voluntary and Detailed Rakah Tracking -->
+        <h2 class="text-xl font-bold text-teal-800 mb-3 border-b pb-1">Detailed Rakah Tracker (Sunnah, Witr, Nafl)</h2>
+        <div id="voluntary-prayer-list" class="space-y-4">
+            <!-- Sunnah, Witr, Nafl cards will be injected here -->
+        </div>
+
+        <!-- Instructions/Footer -->
+        <footer class="mt-8 pt-4 border-t border-gray-100 text-center text-sm text-gray-400">
+            <p class="mb-2">Fard Status Cycle: Not Done &rarr; Prayed &rarr; Jama'ah &rarr; Missed &rarr; Not Done</p>
+            
+            <!-- NEW: Developer Information Section -->
+            <div class="border-t border-gray-200 pt-3 text-gray-600">
+                <p class="font-bold text-teal-800 mb-1">About the Developer</p>
+                <p class="text-xs leading-relaxed">
+                    This Salah Tracker application was developed by **Faiz (UstaaD)** as a passion project, combining my interest in **Islamic studies** and **coding**. 
+                    I am an 8th-grade student with a focus on building useful **offline web apps** and learning **JavaScript, HTML, and CSS**. 
+                    My long-term goal is to become a **scientist** and continue developing technology, including **Islamic apps**, that benefits the community. 
+                    This app represents a small step toward that aspiration, built with dedication from Ahmedabad, Insha'Allah.
+                </p>
+                <p class="text-[0.65rem] mt-2">© 2025 Faiz. All Rights Reserved.</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Congratulatory Modal - Custom Pop-up -->
+    <div id="congratulations-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 hidden flex items-center justify-center p-4 z-50 transition-opacity duration-300 opacity-0" aria-modal="true" role="dialog">
+        <div class="bg-white rounded-xl p-8 max-w-sm w-full text-center shadow-2xl transform scale-95 transition-transform duration-300">
+            <svg class="mx-auto h-16 w-16 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h3 class="mt-4 text-2xl font-bold text-teal-800">Mubarak!</h3>
+            <p id="modal-message" class="mt-2 text-gray-600">You have completed your Fard Salah for the day, Insha'Allah!</p>
+            <button id="close-modal" class="mt-5 w-full rounded-lg bg-teal-500 py-2 text-white font-semibold hover:bg-teal-600 transition">
+                Jazak Allah Khair
+            </button>
+        </div>
+    </div>
+
+
+    <!-- Application Script -->
+    <script type="module">
+        // --- Global Variables ---
+        const USER_KEY = 'user_profile';
+        let currentUserId = 'LOCAL_USER'; // Fixed user ID for local storage
+        let currentDate = getTodayDate();
+        let userProfile = {};
+
+        // --- Global Chart Variables ---
+        let fardChart = null;
+        let rakahChart = null;
+        
+        // Defines the prayers, their types, and default Rakah counts
+        const PRAYERS = [
+            { name: 'Fajr', label: 'Fajr', fardRakah: 2, sunnahRakah: 2, estimatedSunnahRakah: 2, type: 'FardSunnah' },
+            { name: 'Dhuhr', label: 'Dhuhr', fardRakah: 4, sunnahRakah: 4, estimatedSunnahRakah: 6, type: 'FardSunnah' },
+            { name: 'Asr', label: 'Asr', fardRakah: 4, sunnahRakah: 0, estimatedSunnahRakah: 4, type: 'FardSunnah' },
+            { name: 'Maghrib', label: 'Maghrib', fardRakah: 3, sunnahRakah: 2, estimatedSunnahRakah: 2, type: 'FardSunnah' },
+            { name: 'Isha', label: 'Isha', fardRakah: 4, sunnahRakah: 2, estimatedSunnahRakah: 4, type: 'FardSunnah' },
+            { name: 'Witr', label: 'Witr (Optional)', fardRakah: 0, maxRakah: 3, type: 'Nafl' },
+            { name: 'Nafl', label: 'Nafl/Tahajjud', fardRakah: 0, maxRakah: 12, type: 'Nafl' }
+        ];
+
+        // Status cycle for the Fard component
+        const STATUSES = ['None', 'Prayed', 'Jamaah', 'Missed'];
+        
+        // Messages for Isha Completion
+        const congratulatoryMessages = [
+            "Alhamdulillah! You successfully completed all five Fard Salah today. May Allah reward you abundantly.",
+            "Mubarak! All obligatory prayers for the day are done. You have secured your daily connection with Allah.",
+            "Jazak Allah Khair! Your daily five prayers are completed. May this act be heavy on your scales of good deeds.",
+            "Praise be to Allah! You completed the five daily prayers. Now is the time to rest and recharge for tomorrow's devotion.",
+            "A wonderful accomplishment! All five Fard prayers are marked. May Allah grant you steadfastness in your worship."
+        ];
+
+
+        // --- DOM Elements ---
+        const appContainer = document.getElementById('app');
+        const userInfoOverlay = document.getElementById('user-info-overlay');
+        const userInfoForm = document.getElementById('user-info-form');
+        const userNameInput = document.getElementById('user-name');
+        const userLastNameInput = document.getElementById('user-last-name');
+
+        const dateInput = document.getElementById('date-input');
+        const dateInputWrapper = document.getElementById('date-input-wrapper');
+        const fardStatusDashboard = document.getElementById('fard-status-dashboard');
+        const voluntaryPrayerList = document.getElementById('voluntary-prayer-list');
+        const progressSummary = document.getElementById('progress-summary');
+        const prevDayButton = document.getElementById('prev-day');
+        const nextDayButton = document.getElementById('next-day');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const displayDayNameEl = document.getElementById('display-day-name');
+        const displayFullDateEl = document.getElementById('display-full-date');
+        const openDatePickerBtn = document.getElementById('open-date-picker');
+        const personalizedGreetingEl = document.getElementById('personalized-greeting');
+        const displayFullNameEl = document.getElementById('display-full-name');
+        const resetProfileBtn = document.getElementById('reset-profile-btn'); // NEW DOM ELEMENT
+        
+        // Modal Elements
+        const congratulationsModal = document.getElementById('congratulations-modal');
+        const modalMessageEl = document.getElementById('modal-message');
+        const closeModalBtn = document.getElementById('close-modal');
+        
+        // Toast Elements
+        const toastNotification = document.getElementById('toast-notification');
+
+
+        // --- Utility Functions ---
+
+        /**
+         * Returns today's date in YYYY-MM-DD format.
+         * @returns {string} The current date string.
+         */
+        function getTodayDate() {
+            const now = new Date();
+            return now.toISOString().split('T')[0];
+        }
+
+        /**
+         * Formats a Date object to YYYY-MM-DD string.
+         * @param {Date} date - The date object.
+         * @returns {string} The formatted date string.
+         */
+        function formatDate(date) {
+            return date.toISOString().split('T')[0];
+        }
+        
+        /**
+         * Converts a YYYY-MM-DD string to a Date object.
+         * @param {string} dateString - The date string.
+         * @returns {Date} The Date object.
+         */
+        function parseDate(dateString) {
+            const parts = dateString.split('-');
+            // Create date in UTC to avoid timezone shifts when navigating days
+            return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+        }
+
+        /**
+         * Updates the visible date display (Day Name and Full Date).
+         * @param {string} dateString - The date (YYYY-MM-DD).
+         */
+        function updateDateDisplay(dateString) {
+            const date = new Date(dateString + 'T00:00:00'); // Ensure it's treated as start of day local time
+            
+            const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+            const fullDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+            displayDayNameEl.textContent = dayName;
+            displayFullDateEl.textContent = fullDate;
+        }
+
+        /**
+         * Sets the date in the input field and updates the UI based on the new date.
+         * @param {string} dateString - The date to set (YYYY-MM-DD).
+         */
+        function setDate(dateString) {
+            currentDate = dateString;
+            dateInput.value = currentDate;
+            updateDateDisplay(currentDate); // Update the visual display
+            
+            // Load and render data from local storage
+            const salahData = loadSalahFromLocal(currentDate);
+            renderUI(salahData);
+            
+            const today = getTodayDate();
+            
+            // Logic to prevent selecting a future date after today
+            nextDayButton.disabled = currentDate >= today;
+            nextDayButton.classList.toggle('opacity-50', currentDate >= today);
+            
+            // Hide the calendar input once a date is set or when navigating
+            dateInputWrapper.classList.remove('show');
+        }
+
+        /**
+         * Renders all major UI components based on the loaded salah data.
+         * @param {object} data - The current day's prayer data.
+         */
+        function renderUI(data) {
+            // If data is null (local storage empty), initialize with defaults
+            const effectiveData = data || generateDefaultSalahData(currentDate); 
+            renderProgressSummary(effectiveData);
+            renderFardStatusDashboard(effectiveData);
+            renderVoluntaryRakahTracker(effectiveData);
+            loadingIndicator.classList.add('hidden');
+        }
+        
+        // --- Local Storage Functions ---
+
+        /**
+         * Loads user profile from local storage.
+         * @returns {object|null} The user profile or null.
+         */
+        function loadUserProfile() {
+            const profileString = localStorage.getItem(USER_KEY);
+            if (profileString) {
+                try {
+                    return JSON.parse(profileString);
+                } catch (e) {
+                    console.error("Error parsing user profile:", e);
+                    return null;
+                }
+            }
+            return null;
+        }
+        
+        /**
+         * Saves user profile to local storage.
+         * @param {object} profile - The user profile object.
+         */
+        function saveUserProfile(profile) {
+            try {
+                localStorage.setItem(USER_KEY, JSON.stringify(profile));
+                userProfile = profile;
+            } catch (e) {
+                console.error("Error saving user profile:", e);
+            }
+        }
+
+        /**
+         * Generates a local storage key, prefixed by the user ID.
+         * @param {string} dateString - The date (YYYY-MM-DD).
+         * @returns {string} The local storage key.
+         */
+        function getLocalStorageKey(dateString) {
+            // User ID is fixed as LOCAL_USER since we are not using Firebase auth
+            return `salah_data_${currentUserId}_${dateString}`;
+        }
+        
+        /**
+         * Generates the default structure for the prayer data.
+         * @param {string} dateString - The date (YYYY-MM-DD).
+         * @returns {object} The default data structure.
+         */
+        function generateDefaultSalahData(dateString) {
+            let defaultData = {};
+            PRAYERS.forEach(p => {
+                const prayerNameKey = p.name.toLowerCase();
+                if (p.type === 'FardSunnah') {
+                     defaultData[prayerNameKey] = {
+                        fardStatus: 'None',
+                        sunnahRakah: 0,
+                        date: dateString
+                    };
+                } else if (p.type === 'Nafl') {
+                    defaultData[prayerNameKey] = {
+                        rakahCount: 0,
+                        date: dateString
+                    };
+                }
+            });
+            return defaultData;
+        }
+
+
+        /**
+         * Loads salah data from local storage for a specific date.
+         * @param {string} dateString - The date (YYYY-MM-DD).
+         * @returns {object|null} The parsed data object or null.
+         */
+        function loadSalahFromLocal(dateString) {
+            const key = getLocalStorageKey(dateString);
+            const dataString = localStorage.getItem(key);
+            if (dataString) {
+                try {
+                    // Initialize with defaults and merge stored data to ensure all fields exist
+                    let data = generateDefaultSalahData(dateString);
+                    const storedData = JSON.parse(dataString);
+                    
+                    PRAYERS.forEach(p => {
+                        const prayerNameKey = p.name.toLowerCase();
+                        if (storedData[prayerNameKey]) {
+                           data[prayerNameKey] = { ...data[prayerNameKey], ...storedData[prayerNameKey] };
+                        }
+                    });
+                    return data;
+
+                } catch (e) {
+                    console.error("Error parsing data from local storage:", e);
+                    return null;
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Saves the entire salah data object to local storage.
+         * @param {object} data - The entire salah data object.
+         * @param {string} dateString - The date (YYYY-MM-DD).
+         */
+        function saveSalahToLocal(data, dateString) {
+            const key = getLocalStorageKey(dateString);
+            try {
+                localStorage.setItem(key, JSON.stringify(data));
+                console.log(`Saved data for ${dateString} to local storage. Key: ${key}`);
+            } catch (e) {
+                console.error("Error saving data to local storage:", e);
+                showToast("Error saving data to local storage.");
+            }
+        }
+        
+        // --- Notification Functions ---
+
+        /**
+         * Shows a temporary toast notification.
+         * @param {string} message - The message to display.
+         */
+        let toastTimeout;
+        function showToast(message) {
+            clearTimeout(toastTimeout);
+            
+            toastNotification.textContent = message;
+            toastNotification.classList.remove('hidden');
+            // Force reflow to restart animation/transition
+            void toastNotification.offsetWidth; 
+            
+            toastNotification.classList.remove('opacity-0', 'translate-y-[-20px]');
+            toastNotification.classList.add('show');
+
+            toastTimeout = setTimeout(() => {
+                toastNotification.classList.remove('show');
+                toastNotification.classList.add('opacity-0', 'translate-y-[-20px]');
+                
+                // Hide completely after transition
+                setTimeout(() => {
+                    toastNotification.classList.add('hidden');
+                }, 300); 
+                
+            }, 3000); // Show for 3 seconds
+        }
+
+        /**
+         * Displays the congratulatory modal (reserved for Isha completion).
+         * @param {string} message - The message to display.
+         */
+        function showCongratulations(message) {
+            modalMessageEl.textContent = message;
+            congratulationsModal.classList.remove('hidden', 'opacity-0');
+            congratulationsModal.classList.add('opacity-100');
+            
+            const innerModal = congratulationsModal.querySelector('div');
+            innerModal.classList.remove('scale-95');
+            innerModal.classList.add('scale-100');
+        }
+
+        function hideCongratulations() {
+            const innerModal = congratulationsModal.querySelector('div');
+            innerModal.classList.remove('scale-100');
+            innerModal.classList.add('scale-95');
+
+            congratulationsModal.classList.remove('opacity-100');
+            congratulationsModal.classList.add('opacity-0');
+
+            setTimeout(() => {
+                congratulationsModal.classList.add('hidden');
+            }, 300); // Wait for the transition
+        }
+        
+        // Event listeners for closing modal
+        closeModalBtn.addEventListener('click', hideCongratulations);
+        congratulationsModal.addEventListener('click', (e) => {
+            if (e.target.id === 'congratulations-modal') {
+                hideCongratulations();
+            }
+        });
+
+
+        // --- Data Update Function (Using Local Storage) ---
+        
+        /**
+         * Updates the status or Rakah count for a specific prayer in Local Storage.
+         * @param {string} prayerName - The name of the prayer (e.g., 'fajr').
+         * @param {object} updatedFields - The field(s) to update.
+         */
+        async function updateSalah(prayerName, updatedFields) {
+            loadingIndicator.classList.remove('hidden');
+
+            const prayerKey = prayerName.toLowerCase();
+            
+            // 1. Load current full data state (or default if none exists)
+            let currentData = loadSalahFromLocal(currentDate) || generateDefaultSalahData(currentDate);
+
+            // 2. Merge update
+            currentData[prayerKey] = { ...currentData[prayerKey], ...updatedFields };
+
+            // 3. Save merged data to Local Storage
+            saveSalahToLocal(currentData, currentDate);
+
+            // 4. Update UI instantly using the new data (simulating real-time)
+            renderUI(currentData);
+            
+            // --- Notification Logic ---
+            let toastMessage = `Updated ${prayerName} tracking.`;
+
+            // 1. Special logic for Isha completion (full modal)
+            if (prayerKey === 'isha' && updatedFields.fardStatus) {
+                const status = updatedFields.fardStatus;
+                if (status === 'Prayed' || status === 'Jamaah') {
+                    const randomIndex = Math.floor(Math.random() * congratulatoryMessages.length);
+                    let message = congratulatoryMessages[randomIndex];
+                    
+                    // Add a special Jama'ah note if applicable
+                    if (status === 'Jamaah') {
+                        message = "Jama'ah Bonus! " + message;
+                    }
+
+                    showCongratulations(message);
+                    return; // Exit here to prevent the toast from showing over the modal
+                }
+                toastMessage = `${prayerName} Fard status set to: ${status}.`;
+            } else if (updatedFields.fardStatus) {
+                // 2. Toast for all other Fard status changes
+                toastMessage = `${prayerName} Fard status set to: ${updatedFields.fardStatus}.`;
+            } else if (updatedFields.sunnahRakah !== undefined) {
+                // 3. Toast for Sunnah Rakah changes
+                toastMessage = `${prayerName} Sunnah Rakah count set to ${updatedFields.sunnahRakah}.`;
+            } else if (updatedFields.rakahCount !== undefined) {
+                // 4. Toast for Witr/Nafl Rakah changes
+                toastMessage = `${prayerName} Rakah count set to ${updatedFields.rakahCount}.`;
+            }
+            
+            // Show toast for successful updates (except for Isha completion which shows modal)
+            showToast(toastMessage);
+
+            loadingIndicator.classList.add('hidden');
+        }
+
+
+        // --- UI Rendering Functions ---
+
+        /**
+         * Creates the +/- button group for Rakah tracking.
+         * Note: The step is 2 for Sunnah Rakah and 1 for everything else.
+         */
+        function createRakahCounter(prayerName, fieldName, currentValue) {
+            const container = document.createElement('div');
+            container.className = 'flex items-center space-x-2';
+            
+            // Determine the step: 2 for Sunnah Rakah, 1 for Nafl/Witr.
+            const step = (fieldName === 'sunnahRakah') ? 2 : 1; 
+            
+            const decrementBtn = document.createElement('button');
+            decrementBtn.className = 'rakah-btn w-8 h-8 rounded-full font-extrabold text-lg flex items-center justify-center';
+            decrementBtn.textContent = '-';
+            decrementBtn.disabled = currentValue <= 0;
+
+            const valueSpan = document.createElement('span');
+            valueSpan.className = 'text-xl font-bold text-teal-800 w-8 text-center';
+            valueSpan.textContent = currentValue;
+
+            const incrementBtn = document.createElement('button');
+            incrementBtn.className = 'rakah-btn w-8 h-8 rounded-full font-extrabold text-lg flex items-center justify-center';
+            incrementBtn.textContent = '+';
+
+            // Event Listeners
+            const updateRakah = (delta) => {
+                let newValue = currentValue + (delta * step);
+                if (newValue < 0) newValue = 0;
+                
+                if (newValue === currentValue) {
+                    showToast(`Rakah count for ${prayerName} is already ${currentValue}.`);
+                    return;
+                }
+
+                currentValue = newValue;
+                valueSpan.textContent = newValue;
+                decrementBtn.disabled = newValue <= 0;
+
+                // Update Local Storage
+                updateSalah(prayerName, { [fieldName]: newValue });
+            };
+
+            // delta = -1 means subtraction, delta = 1 means addition
+            decrementBtn.addEventListener('click', () => updateRakah(-1));
+            incrementBtn.addEventListener('click', () => updateRakah(1));
+
+            container.appendChild(decrementBtn);
+            container.appendChild(valueSpan);
+            container.appendChild(incrementBtn);
+
+            return container;
+        }
+
+        /**
+         * Updates the visual appearance of the Fard status tile.
+         */
+        function updateFardTileDisplay(tile, status) {
+            // Reset classes
+            tile.classList.remove('fard-tile-prayed', 'fard-tile-jamaah', 'fard-tile-missed', 'fard-tile-none');
+
+            // Apply new class based on status
+            switch (status) {
+                case 'Prayed':
+                    tile.classList.add('fard-tile-prayed');
+                    break;
+                case 'Jamaah':
+                    tile.classList.add('fard-tile-jamaah');
+                    break;
+                case 'Missed':
+                    tile.classList.add('fard-tile-missed');
+                    break;
+                case 'None':
+                default:
+                    tile.classList.add('fard-tile-none');
+                    break;
+            }
+        }
+
+        /**
+         * Creates a compact tile for the Fard Status Dashboard.
+         */
+        function createFardStatusTile(prayer, fardStatus) {
+            const nameKey = prayer.name.toLowerCase();
+            
+            const tile = document.createElement('div');
+            tile.className = `fard-tile p-2 rounded-lg text-xs font-semibold flex flex-col items-center justify-center h-20 shadow-md transform hover:scale-105 transition duration-150`;
+            tile.setAttribute('data-status', fardStatus);
+            tile.setAttribute('data-prayer', nameKey);
+            updateFardTileDisplay(tile, fardStatus, prayer.label);
+
+            tile.innerHTML = `
+                <p class="text-sm font-bold mb-1">${prayer.label}</p>
+                <p class="text-xs font-medium opacity-80">${prayer.fardRakah} Fard</p>
+                <p class="text-[0.65rem] mt-1 font-semibold text-center uppercase">${fardStatus === 'None' ? 'Not Done' : fardStatus}</p>
+            `;
+
+            tile.addEventListener('click', () => {
+                const currentStatus = tile.getAttribute('data-status');
+                const currentIndex = STATUSES.indexOf(currentStatus);
+                const nextIndex = (currentIndex + 1) % STATUSES.length;
+                const nextStatus = STATUSES[nextIndex];
+
+                // Update UI instantly
+                updateFardTileDisplay(tile, nextStatus, prayer.label);
+                tile.setAttribute('data-status', nextStatus);
+                tile.querySelector('p:last-child').textContent = nextStatus === 'None' ? 'Not Done' : nextStatus;
+                
+                // Update Local Storage
+                updateSalah(nameKey, { fardStatus: nextStatus });
+            });
+
+            return tile;
+        }
+
+
+        /**
+         * Renders the Fard Status Dashboard (Horizontal Tiles).
+         */
+        function renderFardStatusDashboard(salahData) {
+            fardStatusDashboard.innerHTML = '';
+            
+            PRAYERS.filter(p => p.type === 'FardSunnah').forEach(prayer => {
+                const nameKey = prayer.name.toLowerCase();
+                const data = salahData[nameKey] || {};
+                const fardStatus = data.fardStatus || 'None';
+
+                const tile = createFardStatusTile(prayer, fardStatus);
+                fardStatusDashboard.appendChild(tile);
+            });
+        }
+        
+        /**
+         * Creates a card for Sunnah Rakah tracking (companion to Fard tiles).
+         */
+        function createSunnahRakahCard(prayer, data) {
+            const nameKey = prayer.name.toLowerCase();
+            const sunnahRakah = data.sunnahRakah || 0;
+            // Find the full prayer definition to get the estimated count
+            const prayerDefinition = PRAYERS.find(p => p.name.toLowerCase() === nameKey);
+            const estimated = prayerDefinition ? prayerDefinition.estimatedSunnahRakah : 'N/A';
+
+
+            const card = document.createElement('div');
+            card.className = 'prayer-card p-4 bg-white rounded-xl flex items-center justify-between border-l-4 border-teal-500';
+            
+            const nameEl = document.createElement('div');
+            nameEl.innerHTML = `
+                <span class="text-lg font-semibold text-teal-800">${prayer.label} Sunnah</span>
+                <span class="text-xs font-medium text-gray-500 block">Estimated Sunnah: ${estimated} Rakah</span>
+            `;
+            
+            // Sunnah Rakah Counter (Free-form, step of 2)
+            const counterGroup = createRakahCounter(nameKey, 'sunnahRakah', sunnahRakah); 
+            card.appendChild(nameEl);
+            card.appendChild(counterGroup);
+
+            return card;
+        }
+
+
+        /**
+         * Creates a card for Nafl (Voluntary) prayers like Witr and general Nafl.
+         */
+        function createNaflCard(prayer, data) {
+             const nameKey = prayer.name.toLowerCase();
+             const rakahCount = data.rakahCount || 0;
+             const maxRakah = prayer.maxRakah;
+
+             const card = document.createElement('div');
+             card.className = 'prayer-card prayer-card-nafl p-4 bg-white rounded-xl flex items-center justify-between';
+
+             const nameEl = document.createElement('div');
+             nameEl.innerHTML = `
+                 <span class="text-lg font-bold text-yellow-700">${prayer.label}</span>
+                 <span class="text-xs font-medium text-gray-500 block">Max Suggested: ${maxRakah} Rakah</span>
+             `;
+             
+             // Nafl Rakah Counter (Free-form, step of 1)
+             const counterGroup = createRakahCounter(nameKey, 'rakahCount', rakahCount);
+
+             card.appendChild(nameEl);
+             card.appendChild(counterGroup);
+
+             return card;
+        }
+
+
+        /**
+         * Renders the Sunnah, Witr, and Nafl tracking cards.
+         */
+        function renderVoluntaryRakahTracker(salahData) {
+            voluntaryPrayerList.innerHTML = '';
+            
+            PRAYERS.forEach(prayer => {
+                const prayerNameKey = prayer.name.toLowerCase();
+                const data = salahData[prayerNameKey] || {};
+                
+                let card;
+                if (prayer.type === 'FardSunnah' && prayer.sunnahRakah > 0) {
+                    card = createSunnahRakahCard(prayer, data);
+                } else if (prayer.type === 'Nafl') {
+                    card = createNaflCard(prayer, data);
+                }
+
+                if (card) {
+                    voluntaryPrayerList.appendChild(card);
+                }
+            });
+        }
+        
+        /**
+         * Renders the Daily Progress Summary stats.
+         * @param {object} salahData - The current day's prayer data.
+         */
+        function renderProgressSummary(salahData) {
+            let fardCompleted = 0;
+            let jamaahCount = 0;
+            let totalSunnahRakah = 0;
+            let totalVoluntaryRakah = 0;
+            
+            // Calculate Fard and Jama'ah counts
+            PRAYERS.filter(p => p.type === 'FardSunnah').forEach(prayer => {
+                const data = salahData[prayer.name.toLowerCase()];
+                if (data) {
+                    if (data.fardStatus === 'Prayed') {
+                        fardCompleted++;
+                    } else if (data.fardStatus === 'Jamaah') {
+                        fardCompleted++;
+                        jamaahCount++;
+                    }
+                }
+            });
+
+            // Calculate Rakah counts
+            PRAYERS.forEach(prayer => {
+                const data = salahData[prayer.name.toLowerCase()];
+                if (data) {
+                    if (prayer.type === 'FardSunnah' && data.sunnahRakah > 0) {
+                        totalSunnahRakah += data.sunnahRakah;
+                    } else if (prayer.type === 'Nafl') {
+                        totalVoluntaryRakah += data.rakahCount;
+                    }
+                }
+            });
+
+            const stats = [
+                { value: `${fardCompleted}/5`, label: 'Fard Completed', color: '#047857' },
+                { value: jamaahCount, label: 'Jama\'ah Count', color: '#059669' },
+                { value: totalSunnahRakah, label: 'Total Sunnah Rakah', color: '#0d9488' },
+                { value: totalVoluntaryRakah, label: 'Witr & Nafl Rakah', color: '#fbbf24' }
+            ];
+
+            progressSummary.innerHTML = stats.map(stat => `
+                <div class="progress-stat">
+                    <div class="value" style="color: ${stat.color};">${stat.value}</div>
+                    <div class="label">${stat.label}</div>
+                </div>
+            `).join('');
+
+            // Render the Charts
+            renderFardPieChart(salahData);
+            renderRakahBarChart(salahData);
+        }
+
+        /**
+         * Renders the Fard Status Pie Chart.
+         * @param {object} salahData - The current day's prayer data.
+         */
+        function renderFardPieChart(salahData) {
+            if (fardChart) {
+                fardChart.destroy();
+            }
+
+            let completed = 0;
+            let missed = 0;
+            let none = 0;
+
+            PRAYERS.filter(p => p.type === 'FardSunnah').forEach(prayer => {
+                const data = salahData[prayer.name.toLowerCase()];
+                if (data) {
+                    if (data.fardStatus === 'Prayed' || data.fardStatus === 'Jamaah') {
+                        completed++;
+                    } else if (data.fardStatus === 'Missed') {
+                        missed++;
+                    } else if (data.fardStatus === 'None') {
+                        none++;
+                    }
+                }
+            });
+
+            const ctx = document.getElementById('fardPieChart').getContext('2d');
+            fardChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Completed', 'Missed', 'Not Done'],
+                    datasets: [{
+                        data: [completed, missed, none],
+                        backgroundColor: [
+                            '#047857', // Deep Green (Completed/Jamaah)
+                            '#f87171', // Red (Missed)
+                            '#9ca3af'  // Gray (None)
+                        ],
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Renders the Rakah Bar Chart (Fard + Sunnah + Voluntary).
+         * @param {object} salahData - The current day's prayer data.
+         */
+        function renderRakahBarChart(salahData) {
+            if (rakahChart) {
+                rakahChart.destroy();
+            }
+            
+            const labels = [];
+            const totalRakahData = [];
+
+            // 1. Data for Fard/Sunnah prayers
+            PRAYERS.filter(p => p.type === 'FardSunnah').forEach(prayer => {
+                const nameKey = prayer.name.toLowerCase();
+                const data = salahData[nameKey] || {};
+                
+                labels.push(prayer.label);
+                
+                // Total Rakah: Fard (only if prayed) + Sunnah
+                let fardPrayed = (data.fardStatus === 'Prayed' || data.fardStatus === 'Jamaah') ? prayer.fardRakah : 0;
+                let sunnahPrayed = data.sunnahRakah || 0;
+                
+                totalRakahData.push(fardPrayed + sunnahPrayed);
+            });
+
+            // 2. Add Witr/Nafl total as an extra bar
+            const witrData = salahData['witr'] || {};
+            const naflData = salahData['nafl'] || {};
+            labels.push('Witr/Nafl');
+            totalRakahData.push((witrData.rakahCount || 0) + (naflData.rakahCount || 0));
+
+
+            const ctx = document.getElementById('rakahBarChart').getContext('2d');
+            rakahChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Total Rakah Prayed',
+                        data: totalRakahData,
+                        backgroundColor: '#2dd4bf', // Medium Teal
+                        borderColor: '#0f766e',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Rakah Count'
+                            },
+                            ticks: {
+                                precision: 0 // Ensure Rakah count is integer
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- User Entry and Initialization Logic ---
+
+        /**
+         * Shows the app and updates personalized elements.
+         */
+        function showApp(profile) {
+            userProfile = profile;
+            
+            // Set personalized greeting and profile info
+            const fullName = `${profile.firstName} ${profile.lastName}`;
+            personalizedGreetingEl.innerHTML = `Assalamualikum, <span class="text-teal-600">${profile.firstName}</span>!`;
+            displayFullNameEl.textContent = fullName;
+
+            // Hide entry form and show app
+            userInfoOverlay.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+
+            // Load data for the current date
+            setDate(currentDate);
+        }
+
+        /**
+         * Attempts to load user profile, if not found, shows the entry form.
+         */
+        function initializeApp() {
+            // Remove all Firebase-related initialization, as we are offline-only now
+            
+            const profile = loadUserProfile();
+            
+            if (profile && profile.firstName) {
+                // Profile found, proceed to app
+                showApp(profile);
+            } else {
+                // No profile found, show entry form
+                userInfoOverlay.classList.remove('hidden');
+            }
+        }
+        
+        /**
+         * Resets the local user profile and returns to the entry screen.
+         */
+        function resetProfile() {
+            // 1. Confirm deletion (using a native confirm for simplicity in this case)
+            if (!confirm("Are you sure you want to reset your profile? This will delete your name/last name locally and return you to the entry screen. Your prayer data will remain on this device.")) {
+                return;
+            }
+            
+            // 2. Delete the profile key from Local Storage
+            localStorage.removeItem(USER_KEY);
+            
+            // 3. Clear profile variables
+            userProfile = {};
+            
+            // 4. Reload the app state, which will show the entry form
+            showToast("Profile reset successfully. Please enter your details again.");
+            appContainer.classList.add('hidden');
+            userInfoOverlay.classList.remove('hidden');
+            
+            // Clear inputs for next user
+            userNameInput.value = '';
+            userLastNameInput.value = '';
+        }
+
+
+        // Handle form submission to save user details
+        userInfoForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const firstName = userNameInput.value.trim();
+            const lastName = userLastNameInput.value.trim();
+            
+            if (firstName && lastName) {
+                const newProfile = { firstName, lastName };
+                saveUserProfile(newProfile);
+                showToast(`Welcome, ${firstName}! Your profile has been saved locally.`);
+                showApp(newProfile);
+            } else {
+                showToast("Please enter both your Name and Last Name.");
+            }
+        });
+
+
+        // --- Event Handlers (UI) ---
+
+        // Log Out / Reset Profile Button
+        resetProfileBtn.addEventListener('click', resetProfile);
+
+        // Date Navigation Handlers
+        openDatePickerBtn.addEventListener('click', () => {
+            const isVisible = dateInputWrapper.classList.toggle('show');
+            if (isVisible) {
+                dateInput.setAttribute('max', getTodayDate());
+                dateInput.focus();
+                setTimeout(() => { dateInput.click(); }, 10);
+            }
+        });
+
+        dateInput.addEventListener('change', (e) => {
+            if (e.target.value) {
+                setDate(e.target.value);
+            }
+        });
+
+        prevDayButton.addEventListener('click', () => {
+            const current = parseDate(currentDate);
+            current.setUTCDate(current.getUTCDate() - 1);
+            setDate(formatDate(current));
+        });
+
+        nextDayButton.addEventListener('click', () => {
+            const current = parseDate(currentDate);
+            current.setUTCDate(current.getUTCDate() + 1);
+            setDate(formatDate(current));
+        });
+
+        // Start the application
+        window.onload = initializeApp;
+    </script>
+</body>
+</html>
